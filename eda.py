@@ -26,7 +26,8 @@ def count_remote_sqlite_files(repo_id="domyn/FINCH",verbose = False):
 def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
     """
     Correctly steps into the 4 source benchmark wrappers (bird, spider, etc.) 
-    to extract the true 33 nested databases and their 292 individual tables.
+    to extract the true 33 nested databases, their 292 individual tables,
+    and returns a clean summary showing total columns alongside max values.
     """
     # 1. Download file from Hugging Face
     print(f"Downloading '{filename}' from repo '{repo_id}'...")
@@ -87,55 +88,55 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
     num_suites = df_schema["suite"].nunique()
     num_databases = df_schema["database"].nunique()
     
-    # Calculate unique tables using the database name + table name combination 
-    # to protect against table name collisions across different databases.
+    # Calculate unique tables using the database name + table name combination
     unique_tables_df = df_schema[["database", "table"]].drop_duplicates()
     num_tables = unique_tables_df.shape[0]
 
-    # Calculate column counts per table
+    # Calculate column counts per table instance
     cols_per_table = (
         df_schema[df_schema["column_name"].notna()]
         .groupby(["database", "table"])["column_name"]
         .count()
         .reset_index(name="column_count")
     )
+    
+    # Extract total column sums and upper limits per database
     db_column_stats = (
         cols_per_table.groupby("database")["column_count"]
-        .agg(["max", "mean", "median"])
+        .agg(["max", "sum"])
         .reset_index()
     )
     
     # Rename columns for a clean presentation
-    db_column_stats.columns = ["database", "max_columns", "avg_columns", "median_columns"]
+    db_column_stats.columns = ["database", "max_columns", "total_columns"]
     
-    # Round the average column to 1 decimal place for readability
-    db_column_stats["avg_columns"] = db_column_stats["avg_columns"].round(1)
+    # Sort the table by the highest absolute total column volume
+    db_column_stats = db_column_stats.sort_values(by="total_columns", ascending=False)
     
-    # Sort the table by the highest maximum column count
-    db_column_stats = db_column_stats.sort_values(by="max_columns", ascending=False)
-    # Compute global metrics across all 292 tables
+    # Compute global metrics across all tables
     global_summary = pd.DataFrame([{
         "database": "GLOBAL TOTAL / ALL DBS",
         "max_columns": cols_per_table["column_count"].max(),
-        "avg_columns": round(cols_per_table["column_count"].mean(), 1),
-        "median_columns": cols_per_table["column_count"].median()
+        "total_columns": cols_per_table["column_count"].sum()
     }])
 
     # 6. Display Precise Summary Output
-    print("\n" + "="*65)
+    print("\n" + "="*55)
     print("                      FINCH SCHEMA METRICS")
-    print("="*65)
+    print("="*55)
     print(f"📊 TOTAL DATABASES:       {num_databases}")
     print(f"🏢 TOTAL TABLES:          {num_tables} across all databases")
-    print("="*65)
-    print("\n📊 COLUMN COUNT STATS PER TABLE (BY DATABASE):")
-    print("-" * 65)
+    print("="*55)
+    print("\n📊 COLUMN DATA SUMMARY (BY DATABASE):")
+    print("-" * 55)
     print(db_column_stats.to_string(index=False))
-    print("="*65)
+    print("="*55)
     print("\n📊 DATASET GLOBAL SUMMARY:")
-    print("-" * 65)
+    print("-" * 55)
     print(global_summary.to_string(index=False))
-    print("="*65)
+    print("="*55)
+
+    return df_schema
 
 
 if __name__ == "__main__":
