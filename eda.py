@@ -26,7 +26,8 @@ def count_remote_sqlite_files(repo_id="domyn/FINCH",verbose = False):
 def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
     """
     Extracts nested databases, tables, and column type structures from the 
-    FINCH YAML file, displaying totals, column counts, and unique data types.
+    FINCH YAML file, displaying totals, column counts, and type prevalence percentages
+    along with their internal structural parameters (e.g., VARCHAR lengths).
     """
     # 1. Download file from Hugging Face
     print(f"Downloading '{filename}' from repo '{repo_id}'...")
@@ -63,7 +64,7 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
                         "database": actual_db_id,
                         "table": table_name,
                         "column_name": None,
-                        "column_type": None  # Grab type context
+                        "column_type": None
                     })
                     continue
                 
@@ -74,7 +75,7 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
                         "database": actual_db_id,
                         "table": table_name,
                         "column_name": col.get("column_name"),
-                        "column_type": col.get("column_type")  # <-- Added extraction
+                        "column_type": col.get("column_type")
                     })
 
     # 3. Create DataFrame
@@ -111,35 +112,67 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
         "total_columns": cols_per_table["column_count"].sum()
     }])
 
-    # NEW: Extract and clean up unique column types
-    # Drops NaN values, strips out whitespace, and converts to uppercase for uniformity
-    raw_types = df_schema["column_type"].dropna().astype(str).str.strip().str.upper()
+# =========================================================================
+    # 5. FIX: Calculate % Prevalence and capture inner parameter variations cleanly
+    # =========================================================================
+    # Drop completely missing type tags and convert to string safely
+    raw_series = df_schema["column_type"].fillna("UNSPECIFIED").astype(str).str.strip().str.upper()
     
-    # Strip any brackets/parentheses and their content, then get unique base values
-    base_types = raw_types.str.split(r'\(|\[').str[0].str.strip().unique()
-    unique_types_list = sorted(list(set(base_types)))
+    # Extract base type (e.g., 'VARCHAR' from 'VARCHAR(255)')
+    df_schema["base_type"] = raw_series.str.split(r'\(|\[').str[0].str.strip()
+    # Replace blank strings with 'UNSPECIFIED'
+    df_schema["base_type"] = df_schema["base_type"].replace("", "UNSPECIFIED")
 
+    # Safe regex extract: expand=False guarantees a Series structure back to avoid AttributeError
+    df_schema["variation"] = raw_series.str.extract(r'\((.*?)\)', expand=False).fillna("").str.strip()
+
+    # FIX: Sort parameters cleanly by mapping elements uniformly to avoid mixing ints and strings during sorting
+    variations_map = (
+        df_schema[df_schema["variation"] != ""]
+        .groupby("base_type")["variation"]
+        .apply(lambda x: ", ".join(sorted(list(set(x)), key=lambda v: [int(s) if s.isdigit() else s for s in v.replace(' ', '').split(',') if s])))
+        .to_dict()
+    )
+
+    # Compute frequencies and percentages
+    type_counts = df_schema["base_type"].value_counts()
+    type_percentages = df_schema["base_type"].value_counts(normalize=True) * 100
+    
+    # Build distribution frame with variations mapped in
+    prevalence_df = pd.DataFrame({
+        "column_type": type_counts.index,
+        "count": type_counts.values,
+        "prevalence_%": type_percentages.values.round(2)
+    })
+    
+    # Map variations back to the type labels safely
+    prevalence_df["variations"] = prevalence_df["column_type"].map(variations_map).fillna("NONE")
+    prevalence_df = prevalence_df.sort_values(by="count", ascending=False)
+
+    # =========================================================================
     # 6. Display Precise Summary Output
-    print("\n" + "="*55)
+    # =========================================================================
+    print("\n" + "="*75)
     print("                      FINCH SCHEMA METRICS")
-    print("="*55)
+    print("="*75)
     print(f"📊 TOTAL DATABASES:       {num_databases}")
     print(f"🏢 TOTAL TABLES:          {num_tables} across all databases")
-    print("="*55)
+    print("="*75)
     print("\n📊 COLUMN DATA SUMMARY (BY DATABASE):")
-    print("-" * 55)
+    print("-" * 75)
     print(db_column_stats.to_string(index=False))
-    print("="*55)
+    print("="*75)
     print("\n📊 DATASET GLOBAL SUMMARY:")
-    print("-" * 55)
+    print("-" * 75)
     print(global_summary.to_string(index=False))
-    print("="*55)
+    print("="*75)
     
-    # CLEAN OVERVIEW: Displays just the true base canonical types
-    print("\n🧬 ALL UNIQUE COLUMN TYPES PRESENT IN DATASET:")
-    print("-" * 55)
-    print(", ".join(unique_types_list))
-    print("="*55)
+    print("\n📊 COLUMN TYPE PREVALENCE DISTRIBUTION WITH PARAMETER VARIATIONS:")
+    print("-" * 75)
+    print(prevalence_df.to_string(index=False))
+    print("="*75)
+
+    return df_schema
 
 
 if __name__ == "__main__":
