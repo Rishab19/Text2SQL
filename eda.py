@@ -25,9 +25,8 @@ def count_remote_sqlite_files(repo_id="domyn/FINCH",verbose = False):
 
 def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
     """
-    Correctly steps into the 4 source benchmark wrappers (bird, spider, etc.) 
-    to extract the true 33 nested databases, their 292 individual tables,
-    and returns a clean summary showing total columns alongside max values.
+    Extracts nested databases, tables, and column type structures from the 
+    FINCH YAML file, displaying totals, column counts, and unique data types.
     """
     # 1. Download file from Hugging Face
     print(f"Downloading '{filename}' from repo '{repo_id}'...")
@@ -44,51 +43,47 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
 
     rows = []
     
-    # schema_data is a list of the 4 parent benchmark blocks (bird, book_sql, bull, spider)
+    # Process the parent benchmark blocks (bird, book_sql, bull, spider)
     for benchmark_block in schema_data:
         if not isinstance(benchmark_block, dict):
             continue
             
-        # The suite name (e.g., 'bird' or 'spider')
         suite_name = benchmark_block.get("database", "unknown")
         
-        # Look at the other keys at this level to find the actual database configurations
         for key, value in benchmark_block.items():
             if key == "database" or not isinstance(value, dict):
                 continue
                 
-            # Key is the actual database profile (e.g., 'debit_card_specializing')
             actual_db_id = key
             
-            # Inside the database block, extract the table dictionaries
             for table_name, table_body in value.items():
                 if not isinstance(table_body, dict) or "columns_info" not in table_body:
-                    # Capture empty or shell tables with 0 columns
                     rows.append({
                         "suite": suite_name,
                         "database": actual_db_id,
                         "table": table_name,
-                        "column_name": None
+                        "column_name": None,
+                        "column_type": None  # Grab type context
                     })
                     continue
                 
-                # Extract columns
+                # Extract columns along with their explicit schema types
                 for col in table_body["columns_info"]:
                     rows.append({
                         "suite": suite_name,
                         "database": actual_db_id,
                         "table": table_name,
-                        "column_name": col.get("column_name")
+                        "column_name": col.get("column_name"),
+                        "column_type": col.get("column_type")  # <-- Added extraction
                     })
 
     # 3. Create DataFrame
     df_schema = pd.DataFrame(rows)
 
-    # 4. Compute perfect metrics by targeting the real database level
+    # 4. Compute metrics by targeting the real database level
     num_suites = df_schema["suite"].nunique()
     num_databases = df_schema["database"].nunique()
     
-    # Calculate unique tables using the database name + table name combination
     unique_tables_df = df_schema[["database", "table"]].drop_duplicates()
     num_tables = unique_tables_df.shape[0]
 
@@ -106,11 +101,7 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
         .agg(["max", "sum"])
         .reset_index()
     )
-    
-    # Rename columns for a clean presentation
     db_column_stats.columns = ["database", "max_columns", "total_columns"]
-    
-    # Sort the table by the highest absolute total column volume
     db_column_stats = db_column_stats.sort_values(by="total_columns", ascending=False)
     
     # Compute global metrics across all tables
@@ -119,6 +110,18 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
         "max_columns": cols_per_table["column_count"].max(),
         "total_columns": cols_per_table["column_count"].sum()
     }])
+
+    # NEW: Extract and clean up unique column types
+    # Drops NaN values, strips out whitespace, and converts to uppercase for uniformity
+    unique_types = (
+        df_schema["column_type"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .str.upper()
+        .unique()
+    )
+    unique_types_list = sorted(list(unique_types))
 
     # 6. Display Precise Summary Output
     print("\n" + "="*55)
@@ -134,6 +137,12 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
     print("\n📊 DATASET GLOBAL SUMMARY:")
     print("-" * 55)
     print(global_summary.to_string(index=False))
+    print("="*55)
+    
+    # NEW PRINT LINES: Lists types cleanly grouped together
+    print("\n🧬 ALL UNIQUE COLUMN TYPES PRESENT IN DATASET:")
+    print("-" * 55)
+    print(", ".join(unique_types_list))
     print("="*55)
 
     return df_schema
