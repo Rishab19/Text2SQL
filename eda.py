@@ -113,6 +113,13 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
     
     # Sort the table by the highest maximum column count
     db_column_stats = db_column_stats.sort_values(by="max_columns", ascending=False)
+    # Compute global metrics across all 292 tables
+    global_summary = pd.DataFrame([{
+        "database": "GLOBAL TOTAL / ALL DBS",
+        "max_columns": cols_per_table["column_count"].max(),
+        "avg_columns": round(cols_per_table["column_count"].mean(), 1),
+        "median_columns": cols_per_table["column_count"].median()
+    }])
 
     # 6. Display Precise Summary Output
     print("\n" + "="*65)
@@ -124,6 +131,10 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
     print("\n📊 COLUMN COUNT STATS PER TABLE (BY DATABASE):")
     print("-" * 65)
     print(db_column_stats.to_string(index=False))
+    print("="*65)
+    print("\n📊 DATASET GLOBAL SUMMARY:")
+    print("-" * 65)
+    print(global_summary.to_string(index=False))
     print("="*65)
 
 
