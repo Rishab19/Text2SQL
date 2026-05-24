@@ -141,7 +141,7 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
 if __name__ == "__main__":
     token = UserSecretsClient().get_secret('HF_TOKEN')
     login(token=token.strip())
-    total_remote_files = count_remote_sqlite_files(verbose=True)
+    total_remote_files = count_remote_sqlite_files()
     print(f"Total SQLite files found in remote repo: {total_remote_files}")
     df = summarize_hf_yaml_schema(
         repo_id="domyn/FINCH", 
