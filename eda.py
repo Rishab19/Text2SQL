@@ -99,28 +99,32 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
         .count()
         .reset_index(name="column_count")
     )
-    # Calculate column counts per table
-    max_cols_per_db = (
+    db_column_stats = (
         cols_per_table.groupby("database")["column_count"]
-        .max()
-        .reset_index(name="max_columns_in_a_table")
-        .sort_values(by="max_columns_in_a_table", ascending=False)
+        .agg(["max", "mean", "median"])
+        .reset_index()
     )
+    
+    # Rename columns for a clean presentation
+    db_column_stats.columns = ["database", "max_columns", "avg_columns", "median_columns"]
+    
+    # Round the average column to 1 decimal place for readability
+    db_column_stats["avg_columns"] = db_column_stats["avg_columns"].round(1)
+    
+    # Sort the table by the highest maximum column count
+    db_column_stats = db_column_stats.sort_values(by="max_columns", ascending=False)
 
-    # 5. Display Precise Summary Output
-    print("\n" + "="*50)
-    print("                FINCH SCHEMA METRICS")
-    print("="*50)
-    print(f"📊 TOTAL DATABASES:       {num_databases} (parsed from nested schema blocks)")
-    print(f"📅 BENCHMARK SUITES:      {num_suites} structural categories")
-    print(f"🏢 TABLES:                {num_tables} across all databases")
-    print("="*50)
-    print("\n🔝 MAX COLUMNS IN ANY TABLE PER DATABASE:")
-    print("-" * 50)
-    print(max_cols_per_db.to_string(index=False))
-    print("="*50)
-
-    return df_schema
+    # 6. Display Precise Summary Output
+    print("\n" + "="*65)
+    print("                      FINCH SCHEMA METRICS")
+    print("="*65)
+    print(f"📊 TOTAL DATABASES:       {num_databases}")
+    print(f"🏢 TOTAL TABLES:          {num_tables} across all databases")
+    print("="*65)
+    print("\n📊 COLUMN COUNT STATS PER TABLE (BY DATABASE):")
+    print("-" * 65)
+    print(db_column_stats.to_string(index=False))
+    print("="*65)
 
 
 if __name__ == "__main__":
