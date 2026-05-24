@@ -1,7 +1,7 @@
 from huggingface_hub import login
 from huggingface_hub import HfApi
 
-def count_remote_sqlite_files(repo_id="domyn/FINCH"):
+def count_remote_sqlite_files(repo_id="domyn/FINCH",verbose = False):
     api = HfApi()
     
     # List all files in the dataset repository
@@ -13,8 +13,9 @@ def count_remote_sqlite_files(repo_id="domyn/FINCH"):
     sqlite_files = [f for f in repo_files if f.lower().endswith(db_extensions)]
     
     # Optional: print out the discovered paths
-    for f in sqlite_files:
-        print(f"Found remote file: {f}")
+    if verbose:
+        for f in sqlite_files:
+            print(f"Found remote file: {f}")
         
     return len(sqlite_files)
 
