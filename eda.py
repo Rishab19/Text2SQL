@@ -1,3 +1,5 @@
+import os
+from kaggle_secrets import UserSecretsClient
 from huggingface_hub import login
 from huggingface_hub import HfApi
 
@@ -22,7 +24,7 @@ def count_remote_sqlite_files(repo_id="domyn/FINCH",verbose = False):
 
 
 if __name__ == "__main__":
-    token = input("Please input your Hugging Face token to access the repository: ")
+    token = UserSecretsClient().get_secret('HF_TOKEN')
     login(token=token.strip())
     total_remote_files = count_remote_sqlite_files()
     print(f"Total SQLite files found in remote repo: {total_remote_files}")
