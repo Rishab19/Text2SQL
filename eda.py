@@ -113,15 +113,11 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
 
     # NEW: Extract and clean up unique column types
     # Drops NaN values, strips out whitespace, and converts to uppercase for uniformity
-    unique_types = (
-        df_schema["column_type"]
-        .dropna()
-        .astype(str)
-        .str.strip()
-        .str.upper()
-        .unique()
-    )
-    unique_types_list = sorted(list(unique_types))
+    raw_types = df_schema["column_type"].dropna().astype(str).str.strip().str.upper()
+    
+    # Strip any brackets/parentheses and their content, then get unique base values
+    base_types = raw_types.str.split(r'\(|\[').str[0].str.strip().unique()
+    unique_types_list = sorted(list(set(base_types)))
 
     # 6. Display Precise Summary Output
     print("\n" + "="*55)
@@ -139,13 +135,11 @@ def summarize_hf_yaml_schema(repo_id: str, filename: str) -> pd.DataFrame:
     print(global_summary.to_string(index=False))
     print("="*55)
     
-    # NEW PRINT LINES: Lists types cleanly grouped together
+    # CLEAN OVERVIEW: Displays just the true base canonical types
     print("\n🧬 ALL UNIQUE COLUMN TYPES PRESENT IN DATASET:")
     print("-" * 55)
     print(", ".join(unique_types_list))
     print("="*55)
-
-    return df_schema
 
 
 if __name__ == "__main__":
